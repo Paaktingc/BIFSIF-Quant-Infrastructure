@@ -1,0 +1,26 @@
+# Broker Configuration
+# Mode: paper | live
+broker:
+  mode: paper
+  
+  # Paper trading configuration
+  paper:
+    initial_cash: 100000
+    latency_ms: 50
+    fill_probability: 1.0
+    slippage_bps: 5
+    commission_per_share: 0.005
+    min_commission: 1.00
+  
+  # Live trading configuration (Alpaca)
+  live:
+    provider: alpaca
+    # Use environment variables for secrets
+    # ALPACA_API_KEY, ALPACA_API_SECRET
+    base_url: https://paper-api.alpaca.markets
+
+# Execution engine configuration
+execution:
+  max_retries: 3
+  retry_delay_ms: 1000
+  reconcile_interval_seconds: 60

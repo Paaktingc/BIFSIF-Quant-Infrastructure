@@ -1,0 +1,8 @@
+# Example universe configuration
+name: default_etf_universe
+tickers:
+  - SPY
+  - QQQ
+  - IWM
+  - EFA
+  - EEM

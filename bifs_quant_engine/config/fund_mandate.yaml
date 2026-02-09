@@ -1,0 +1,8 @@
+# Example fund mandate
+fund_name: BIFS Quant Fund
+base_currency: USD
+rebalance_frequency: monthly
+max_positions: 5
+risk_limits:
+  max_drawdown: 0.2
+  var_confidence: 0.95

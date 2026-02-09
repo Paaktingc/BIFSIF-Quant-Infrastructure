@@ -1,0 +1,28 @@
+# Risk Limits Configuration
+# This file defines the risk constraints for the BIFS Quant Engine
+
+position_limits:
+  # Maximum position size as percentage of portfolio equity
+  max_position_pct: 0.10
+  # Maximum position size in dollars
+  max_position_notional: 50000
+  # Maximum shares in a single order
+  max_shares_per_order: 10000
+
+exposure_limits:
+  # Maximum (long + |short|) / equity ratio
+  max_gross_exposure: 2.0
+  # Maximum |long - |short|| / equity ratio (for market neutral)
+  max_net_exposure: 0.20
+  # Maximum long / equity ratio
+  max_long_exposure: 1.5
+  # Maximum |short| / equity ratio
+  max_short_exposure: 0.5
+
+circuit_breakers:
+  # Enable/disable circuit breakers
+  enabled: true
+  # Halt when daily P&L < -X% (0.02 = 2% loss)
+  daily_loss_limit_pct: 0.02
+  # Halt when drawdown from peak > Y% (0.10 = 10% drawdown)
+  drawdown_limit_pct: 0.10
