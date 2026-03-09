@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import matplotlib.pyplot as plt
 
-from core.backtest import Backtest
-from strategies.etf_momentum import ETFMomentumStrategy
+from bifs_quant_engine.core.backtest import Backtest
+from bifs_quant_engine.strategies.etf_momentum import ETFMomentumStrategy
 
 
 def main():
@@ -46,7 +46,8 @@ def main():
     plt.xlabel("Date")
     plt.ylabel("Portfolio Value ($)")
     plt.grid(True)
-    plt.show()
+    plt.savefig('backtest_result.png')
+    print("Plot saved to backtest_result.png")
 
 
 if __name__ == "__main__":

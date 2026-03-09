@@ -408,6 +408,15 @@ class PaperBroker(BrokerAdapter):
                 quantity=new_qty,
                 avg_cost=new_avg_cost.quantize(Decimal("0.0001")),
             )
+
+        elif (current_qty > 0 and delta_qty < 0) or (current_qty < 0 and delta_qty > 0):
+            # Reducing position - keep original cost basis
+            self._positions[symbol] = Position(
+                symbol=symbol,
+                quantity=new_qty,
+                avg_cost=current_cost,
+            )
+
         else:
             # Reducing position - keep original cost basis
             self._positions[symbol] = Position(
@@ -415,3 +424,5 @@ class PaperBroker(BrokerAdapter):
                 quantity=new_qty,
                 avg_cost=current_cost,
             )
+
+        

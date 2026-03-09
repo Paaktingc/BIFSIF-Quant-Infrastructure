@@ -12,13 +12,14 @@ from .portfolio import Portfolio
 class Order:
     symbol: str
     qty: int
-    side: str  # 'buy' or 'sell'
+    side: str  # 'buy', 'sell', or 'sell_short'
 
 
 class SimulatedBroker:
     """
     Simple in-memory broker:
     - executes all orders immediately at given price
+    - supports buy, sell, and sell_short orders
     - no slippage
     - no commission
     """

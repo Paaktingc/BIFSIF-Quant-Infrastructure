@@ -19,9 +19,9 @@ class Portfolio:
     Tracks positions and cash.
     Converts strategy target weights into executable orders.
 
-    Assumptions (v1):
-    - Long-only
-    - No leverage
+    Supports:
+    - Long and short positions
+    - Negative target weights generate sell_short orders
     - Market orders executed at given prices
     """
 
@@ -35,6 +35,7 @@ class Portfolio:
     def value(self, prices: Dict[str, float]) -> float:
         """
         Total portfolio value: cash + market value of all positions.
+        Short positions contribute negative value (quantity is negative).
         """
         pos_val = sum(
             self.positions[s].quantity * prices[s]
@@ -73,13 +74,16 @@ class Portfolio:
         min_notional: float = 0.0,
     ) -> List[Dict]:
         """
-        Convert target weights into buy/sell orders.
+        Convert target weights into buy/sell/sell_short orders.
+
+        Supports negative target weights for short positions.
 
         Returns:
             List of orders:
             [
                 {"symbol": "SPY", "qty": 10, "side": "buy"},
                 {"symbol": "QQQ", "qty": 5, "side": "sell"},
+                {"symbol": "EUR", "qty": 20, "side": "sell_short"},
             ]
         """
         total_value = self.value(prices)
@@ -88,24 +92,21 @@ class Portfolio:
         buy_requests: List[Dict] = []
         sell_requests: List[Dict] = []
 
-        # First pass: compute desired qtys (floor for buys/sells)
         for symbol, target_w in target_weights.items():
             curr_w = current_w.get(symbol, 0.0)
             diff_w = target_w - curr_w
 
-            # skip tiny adjustments
             if abs(diff_w) < 1e-4:
                 continue
 
             dollar_change = diff_w * total_value
 
-            # skip if price missing or non-positive
             price = prices.get(symbol)
             if price is None or price <= 0:
                 continue
 
             if dollar_change > 0:
-                # desired buy quantity
+                # Buy (or cover short): increase position
                 qty = int(math.floor(dollar_change / price))
                 if qty <= 0:
                     continue
@@ -114,37 +115,49 @@ class Portfolio:
                     continue
                 buy_requests.append({"symbol": symbol, "qty": qty, "price": price, "notional": notional})
             else:
-                # desired sell quantity (ensure we don't sell more than held)
+                # Sell (or sell short): decrease position
                 qty = int(math.floor(abs(dollar_change) / price))
-                if qty <= 0:
-                    continue
-                held = self.positions.get(symbol).quantity if symbol in self.positions else 0
-                qty = min(qty, int(held))
                 if qty <= 0:
                     continue
                 notional = qty * price
                 if notional < min_notional:
                     continue
-                sell_requests.append({"symbol": symbol, "qty": qty, "price": price, "notional": notional})
+
+                held = self.positions[symbol].quantity if symbol in self.positions else 0.0
+
+                if held > 0 and qty <= int(held):
+                    # Selling part or all of a long position
+                    sell_requests.append({"symbol": symbol, "qty": qty, "price": price,
+                                          "notional": notional, "side": "sell"})
+                elif held > 0 and qty > int(held):
+                    # Sell entire long, then short the remainder
+                    sell_requests.append({"symbol": symbol, "qty": int(held), "price": price,
+                                          "notional": int(held) * price, "side": "sell"})
+                    short_qty = qty - int(held)
+                    if short_qty > 0:
+                        sell_requests.append({"symbol": symbol, "qty": short_qty, "price": price,
+                                              "notional": short_qty * price, "side": "sell_short"})
+                else:
+                    # No long position (or already short) — open/extend short
+                    sell_requests.append({"symbol": symbol, "qty": qty, "price": price,
+                                          "notional": notional, "side": "sell_short"})
 
         orders: List[Dict] = []
 
-        # Add sells first (they free up cash)
+        # Process sells/shorts first (they free up cash)
         total_proceeds = 0.0
         for s in sell_requests:
-            orders.append({"symbol": s["symbol"], "qty": s["qty"], "side": "sell"})
+            orders.append({"symbol": s["symbol"], "qty": s["qty"], "side": s["side"]})
             total_proceeds += s["notional"]
 
         # Compute available cash for buys
         available_cash = self.cash + total_proceeds
 
-        # Total desired buy notional
         total_buy_notional = sum(b["notional"] for b in buy_requests)
 
         if total_buy_notional <= 0:
             return orders
 
-        # If we can't afford all buys, scale down proportionally
         scale = 1.0 if total_buy_notional <= available_cash else (available_cash / total_buy_notional)
 
         for b in buy_requests:
@@ -166,6 +179,11 @@ class Portfolio:
     def apply_fill(self, symbol: str, qty: int, side: str, price: float):
         """
         Apply one executed trade to portfolio.
+
+        Supports:
+        - buy: purchase shares (or cover a short position)
+        - sell: sell existing long shares
+        - sell_short: open or extend a short position (position goes negative)
         """
         if side == "buy":
             cost = qty * price
@@ -179,19 +197,35 @@ class Portfolio:
             else:
                 self.positions[symbol].quantity += qty
 
-        else:  # sell
+            # Clean up if position is now zero
+            if symbol in self.positions and self.positions[symbol].quantity == 0:
+                del self.positions[symbol]
+
+        elif side == "sell":
             if symbol not in self.positions:
                 return
 
             held = self.positions[symbol].quantity
-            qty = min(qty, held)  # can't sell more than we have
+            actual_qty = min(qty, max(int(held), 0))
+            if actual_qty <= 0:
+                return
 
-            proceeds = qty * price
+            proceeds = actual_qty * price
             self.cash += proceeds
-            self.positions[symbol].quantity -= qty
+            self.positions[symbol].quantity -= actual_qty
 
-            # remove empty positions
-            if self.positions[symbol].quantity <= 0:
+            if self.positions[symbol].quantity == 0:
                 del self.positions[symbol]
 
-                
+        elif side == "sell_short":
+            # Open or extend a short position
+            proceeds = qty * price
+            self.cash += proceeds
+
+            if symbol not in self.positions:
+                self.positions[symbol] = Position(symbol, -qty)
+            else:
+                self.positions[symbol].quantity -= qty
+
+            if symbol in self.positions and self.positions[symbol].quantity == 0:
+                del self.positions[symbol]

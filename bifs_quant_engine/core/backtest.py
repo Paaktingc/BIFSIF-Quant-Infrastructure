@@ -10,7 +10,7 @@ import pandas as pd
 from .data_api import MarketDataAPI
 from .portfolio import Portfolio
 from .broker_sim import SimulatedBroker, Order
-from strategies.base import Strategy
+from bifs_quant_engine.strategies.base import Strategy
 
 
 @dataclass
@@ -22,7 +22,7 @@ class BacktestResult:
 class Backtest:
     """
     Simple backtest:
-    - Long-only
+    - Long and short positions supported
     - Uses daily close prices
     - Rebalances every N trading days
     """
