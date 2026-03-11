@@ -45,14 +45,14 @@ class StatArbConfig:
         rebalance_threshold: Minimum weight change to rebalance
     """
     lookback: int = 60
-    num_factors: int = 5
-    entry_zscore: float = 1.5
+    num_factors: int = 2
+    entry_zscore: float = 1.2
     exit_zscore: float = 0.5
     stop_zscore: float = 3.0
     residual_lookback: int = 20
-    max_position_pct: float = 0.05
-    min_half_life: float = 2.0
-    max_half_life: float = 30.0
+    max_position_pct: float = 0.10
+    min_half_life: float = 1.0
+    max_half_life: float = 60.0
     rebalance_threshold: float = 0.01
 
 
@@ -115,7 +115,7 @@ class StatisticalArbitrageStrategy(BaseStrategy):
         
         # Filter to universe
         available = [s for s in self._universe if s in price_history.columns]
-        if len(available) < self.config.num_factors + 1:
+        if len(available) < 3:
             return weights
         
         prices = price_history[available].iloc[-self.config.lookback:]

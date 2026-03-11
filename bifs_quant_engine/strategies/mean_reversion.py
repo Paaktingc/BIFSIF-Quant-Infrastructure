@@ -28,11 +28,11 @@ class MeanReversionConfig:
         max_position_pct: Maximum position size as % of capital
     """
     rsi_period: int = 14
-    rsi_overbought: float = 70.0
-    rsi_oversold: float = 30.0
+    rsi_overbought: float = 65.0
+    rsi_oversold: float = 35.0
     bb_period: int = 20
     bb_std: float = 2.0
-    max_position_pct: float = 0.10
+    max_position_pct: float = 0.20
 
 
 class MeanReversionStrategy(Strategy):
@@ -88,16 +88,31 @@ class MeanReversionStrategy(Strategy):
             current_upper = bb_upper.iloc[-1]
             current_lower = bb_lower.iloc[-1]
             
-            # Logic:
-            # Long if RSI < Oversold AND Price < Lower BB (Oversold condition)
-            # Short if RSI > Overbought AND Price > Upper BB (Overbought condition)
-            
-            signal = 0.0
-            if current_rsi < self.config.rsi_oversold and current_price < current_lower:
-                signal = 1.0
-            elif current_rsi > self.config.rsi_overbought and current_price > current_upper:
-                signal = -1.0
-                
+            # Score-based signal: either indicator can trigger,
+            # both together give a stronger position
+            long_score = 0.0
+            short_score = 0.0
+
+            # RSI component
+            if current_rsi < self.config.rsi_oversold:
+                long_score += 1.0
+            elif current_rsi > self.config.rsi_overbought:
+                short_score += 1.0
+
+            # Bollinger Band component
+            if current_price < current_lower:
+                long_score += 1.0
+            elif current_price > current_upper:
+                short_score += 1.0
+
+            # Convert score to signal (score 1 = half position, score 2 = full)
+            if long_score > 0:
+                signal = long_score / 2.0
+            elif short_score > 0:
+                signal = -(short_score / 2.0)
+            else:
+                signal = 0.0
+
             if signal != 0.0:
                 weights[symbol] = signal * self.config.max_position_pct
             else:

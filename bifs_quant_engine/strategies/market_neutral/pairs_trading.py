@@ -44,13 +44,13 @@ class PairsTradingConfig:
         cointegration_pvalue: P-value threshold for cointegration
         recalibrate_interval: Days between hedge ratio recalibration
     """
-    entry_zscore: float = 2.0
+    entry_zscore: float = 1.5
     exit_zscore: float = 0.5
     stop_zscore: float = 4.0
     lookback: int = 20
-    hedge_ratio_lookback: int = 60
-    max_position_pct: float = 0.10
-    cointegration_pvalue: float = 0.10
+    hedge_ratio_lookback: int = 40
+    max_position_pct: float = 0.15
+    cointegration_pvalue: float = 0.15
     recalibrate_interval: int = 20
 
 
