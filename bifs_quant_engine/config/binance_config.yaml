@@ -1,0 +1,8 @@
+# Binance WebSocket data feed configuration
+binance:
+  ws_url: "wss://stream.binance.com:9443/ws"
+  rest_url: "https://api.binance.com"
+  symbol: "BTCUSDT"
+  intervals: ["1m"]
+  buffer_size: 1500
+  reconnect_delay_seconds: 5

@@ -26,8 +26,10 @@ from bifs_quant_engine.core.protocols import RiskManager
 from bifs_quant_engine.risk.limits import (
     PositionLimits,
     ExposureLimits,
+    EventContractLimits,
     check_position_limit,
     check_exposure_limits,
+    check_event_contract_limit,
 )
 from bifs_quant_engine.risk.circuit_breakers import (
     CircuitBreakerConfig,
@@ -254,6 +256,51 @@ class ProductionRiskManager(RiskManager):
         """
         return not self._state_tracker.get_state().trading_halted
     
+    def validate_event_contract_order(
+        self,
+        order: Order,
+        event_limits: Optional[EventContractLimits] = None,
+    ) -> RiskDecision:
+        """Validate an event contract order against all risk controls.
+
+        Performs event-contract-specific checks in addition to standard checks:
+        1. Circuit breaker check
+        2. Event contract validation (probability price)
+        3. Event contract position/exposure limits
+
+        Args:
+            order: The order to validate.
+            event_limits: Event contract limits, uses defaults if None.
+
+        Returns:
+            RiskDecision indicating if order is allowed.
+        """
+        # Check circuit breakers first
+        current_state = self._state_tracker.get_state()
+        if current_state.trading_halted:
+            return RiskDecision(
+                action=RiskAction.HALT,
+                order_id=order.order_id,
+                original_quantity=order.quantity,
+                approved_quantity=0,
+                reason="Trading halted due to circuit breaker",
+                violated_limits=self._get_triggered_breakers(current_state),
+            )
+
+        # Event contract validation
+        validation_result = self._validator.validate_event_contract(order)
+        if validation_result.action == RiskAction.REJECT:
+            return validation_result
+
+        # Event contract limits
+        limits = event_limits or EventContractLimits()
+        return check_event_contract_limit(
+            order=order,
+            current_positions=self._current_positions,
+            portfolio_equity=self._portfolio_equity,
+            limits=limits,
+        )
+
     def _get_triggered_breakers(self, state: RiskState) -> List[str]:
         """Get list of triggered circuit breaker names."""
         triggered = []

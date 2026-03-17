@@ -159,12 +159,60 @@ class OrderValidator:
             reason="Order passed basic validation",
         )
     
+    def validate_event_contract(self, order: Order) -> RiskDecision:
+        """Validate an event contract order.
+
+        Checks event-contract-specific constraints on top of basic validation:
+        - Price must be a valid probability (0.01-0.99)
+        - Limit orders must have a limit_price
+
+        Args:
+            order: The order to validate.
+
+        Returns:
+            RiskDecision indicating if order passes validation.
+        """
+        # Run basic validation first
+        basic = self.validate(order)
+        if basic.action == RiskAction.REJECT:
+            return basic
+
+        # Event contracts require a limit price
+        if order.limit_price is None:
+            return RiskDecision(
+                action=RiskAction.REJECT,
+                order_id=order.order_id,
+                original_quantity=order.quantity,
+                approved_quantity=0,
+                reason="Event contract orders require a limit price (probability)",
+                violated_limits=["missing_limit_price"],
+            )
+
+        # Price must be a valid probability
+        if order.limit_price < Decimal("0.01") or order.limit_price > Decimal("0.99"):
+            return RiskDecision(
+                action=RiskAction.REJECT,
+                order_id=order.order_id,
+                original_quantity=order.quantity,
+                approved_quantity=0,
+                reason=f"Price {order.limit_price} not a valid probability [0.01, 0.99]",
+                violated_limits=["invalid_probability"],
+            )
+
+        return RiskDecision(
+            action=RiskAction.ALLOW,
+            order_id=order.order_id,
+            original_quantity=order.quantity,
+            approved_quantity=order.quantity,
+            reason="Event contract order passed validation",
+        )
+
     def validate_batch(self, orders: List[Order]) -> List[RiskDecision]:
         """Validate multiple orders.
-        
+
         Args:
             orders: List of orders to validate
-            
+
         Returns:
             List of RiskDecisions, one per order
         """

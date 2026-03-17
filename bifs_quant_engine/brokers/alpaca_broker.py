@@ -59,7 +59,7 @@ class AlpacaBroker(BrokerAdapter):
     Example:
         config = AlpacaConfig.from_env()
         broker = AlpacaBroker(config)
-        broker.connect()
+        broker.connect()1
         
         order = Order(symbol="AAPL", side=OrderSide.BUY, quantity=100)
         result = broker.submit_order(order)

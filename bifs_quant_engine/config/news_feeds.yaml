@@ -1,0 +1,36 @@
+# News feed sources for Timezone Information Arbitrage
+# Each source is polled on its own interval during active hours
+
+feeds:
+  # Central Banks
+  - name: ecb_press
+    url: "https://www.ecb.europa.eu/rss/press.html"
+    type: rss
+    poll_interval_seconds: 60
+    timezone: "Europe/Frankfurt"
+
+  - name: rba_media
+    url: "https://www.rba.gov.au/rss/rss-cb-media-releases.xml"
+    type: rss
+    poll_interval_seconds: 60
+    timezone: "Australia/Sydney"
+
+  - name: boe_news
+    url: "https://www.bankofengland.co.uk/rss/news"
+    type: rss
+    poll_interval_seconds: 60
+    timezone: "Europe/London"
+
+  # Parliaments
+  - name: eu_parliament
+    url: "https://www.europarl.europa.eu/rss/doc/top-stories/en.xml"
+    type: rss
+    poll_interval_seconds: 120
+    timezone: "Europe/Brussels"
+
+  # Regulatory / Government
+  - name: federal_register
+    url: "https://www.federalregister.gov/api/v1/documents.json?per_page=10&order=newest"
+    type: api
+    poll_interval_seconds: 300
+    timezone: "America/New_York"

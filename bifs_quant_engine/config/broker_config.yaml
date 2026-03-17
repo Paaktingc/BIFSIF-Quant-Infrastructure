@@ -19,6 +19,20 @@ broker:
     # ALPACA_API_KEY, ALPACA_API_SECRET
     base_url: https://paper-api.alpaca.markets
 
+  # Polymarket CLOB configuration
+  polymarket:
+    host: https://clob.polymarket.com
+    chain_id: 137
+    signature_type: 0
+    # Secrets via env: POLYMARKET_PRIVATE_KEY, POLYMARKET_FUNDER
+
+  # Polymarket paper trading
+  polymarket_paper:
+    initial_cash: 10000
+    taker_fee_bps: 0
+    slippage_bps: 0
+    fill_probability: 1.0
+
 # Execution engine configuration
 execution:
   max_retries: 3

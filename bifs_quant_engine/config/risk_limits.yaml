@@ -26,3 +26,13 @@ circuit_breakers:
   daily_loss_limit_pct: 0.02
   # Halt when drawdown from peak > Y% (0.10 = 10% drawdown)
   drawdown_limit_pct: 0.10
+
+event_contract_limits:
+  # Maximum USDC exposure per individual contract
+  max_position_per_contract: 500
+  # Maximum total USDC across all event contracts
+  max_total_event_exposure: 2500
+  # Maximum number of correlated positions
+  max_correlated_positions: 3
+  # Minimum contract liquidity to trade (USDC)
+  min_contract_liquidity: 1000

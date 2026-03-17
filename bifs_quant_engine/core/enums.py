@@ -17,6 +17,8 @@ class OrderType(Enum):
     LIMIT = "limit"
     STOP = "stop"
     STOP_LIMIT = "stop_limit"
+    FOK = "fok"              # Fill Or Kill
+    GTD = "gtd"              # Good Till Date
 
 
 class OrderStatus(Enum):

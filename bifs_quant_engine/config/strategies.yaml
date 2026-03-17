@@ -1,4 +1,30 @@
-# Example strategies configuration
+# Strategies configuration
 etf_momentum:
   top_n: 3
   rebalance: monthly
+
+# Polymarket: Timezone Information Arbitrage
+tz_info_arb:
+  max_position_per_contract: 500
+  min_edge_threshold: 0.05
+  active_hours_utc: [[22, 6]]
+  max_simultaneous_positions: 5
+  sentiment_threshold: 0.7
+  similarity_threshold: 0.65
+  exit_edge_threshold: 0.02
+  max_holding_hours: 12
+  require_two_source: true
+  contract_refresh_minutes: 30
+  news_feeds_config: "config/news_feeds.yaml"
+
+# Polymarket: Volatility Compression Straddle
+vol_straddle:
+  vol_lookback_minutes: 5
+  vol_threshold_ratio: 0.5
+  max_position_usd: 300
+  holding_period_minutes: 60
+  take_profit_pct: 0.15
+  stop_loss_pct: 0.10
+  taker_fee_bps: 156
+  binance_symbol: "BTCUSDT"
+  max_straddles_per_day: 3

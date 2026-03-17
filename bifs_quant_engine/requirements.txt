@@ -6,3 +6,16 @@ ib_insync>=0.9.86
 matplotlib>=3.7
 yfinance>=0.2.0
 statsmodels>=0.14.0
+
+# Polymarket integration
+py-clob-client>=0.17.0
+python-dotenv>=1.0.0
+httpx>=0.25.0
+
+# NLP pipeline
+feedparser>=6.0.0
+sentence-transformers>=2.2.0
+transformers>=4.35.0
+
+# Binance data feed
+websockets>=12.0

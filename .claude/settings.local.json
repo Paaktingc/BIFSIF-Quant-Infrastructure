@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp \"/Users/dixon/PycharmProjects/BIFSIF Quant Infrastructure/bifs_quant_engine/data/polymarket_api.py\" \"/Users/dixon/PycharmProjects/polymarket-alpha-strategies/polymarket_alpha/data/polymarket_api.py\")",
+      "Bash(cp \"/Users/dixon/PycharmProjects/BIFSIF Quant Infrastructure/bifs_quant_engine/data/news_monitor.py\" \"/Users/dixon/PycharmProjects/polymarket-alpha-strategies/polymarket_alpha/data/news_monitor.py\")",
+      "Bash(cp \"/Users/dixon/PycharmProjects/BIFSIF Quant Infrastructure/bifs_quant_engine/data/binance_feed.py\" \"/Users/dixon/PycharmProjects/polymarket-alpha-strategies/polymarket_alpha/data/binance_feed.py\")",
+      "Bash(cp \"/Users/dixon/PycharmProjects/BIFSIF Quant Infrastructure/bifs_quant_engine/config/polymarket_universe.yaml\" \"/Users/dixon/PycharmProjects/polymarket-alpha-strategies/polymarket_alpha/config/polymarket_universe.yaml\")",
+      "Bash(cp \"/Users/dixon/PycharmProjects/BIFSIF Quant Infrastructure/bifs_quant_engine/config/news_feeds.yaml\" \"/Users/dixon/PycharmProjects/polymarket-alpha-strategies/polymarket_alpha/config/news_feeds.yaml\")",
+      "Bash(cp \"/Users/dixon/PycharmProjects/BIFSIF Quant Infrastructure/bifs_quant_engine/config/binance_config.yaml\" \"/Users/dixon/PycharmProjects/polymarket-alpha-strategies/polymarket_alpha/config/binance_config.yaml\")"
+    ],
+    "additionalDirectories": [
+      "/Users/dixon/PycharmProjects/polymarket-alpha-strategies/polymarket_alpha/nlp",
+      "/Users/dixon/PycharmProjects/polymarket-alpha-strategies/polymarket_alpha/strategies"
+    ]
+  }
+}

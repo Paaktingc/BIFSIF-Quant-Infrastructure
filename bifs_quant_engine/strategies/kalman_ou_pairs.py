@@ -764,7 +764,7 @@ class PairsBacktester:
             num_trades=len(trades),
             win_rate=win_rate,
             avg_holding_days=avg_hold,
-            equity_curve=equity_curve,
+            equity_curve=equity_curve, 
             daily_returns=daily_returns,
         )
 

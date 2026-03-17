@@ -169,6 +169,115 @@ def check_position_limit(
     )
 
 
+@dataclass
+class EventContractLimits:
+    """Risk limits for Polymarket event contracts.
+
+    Attributes:
+        max_position_per_contract: Maximum USDC exposure per contract.
+        max_total_event_exposure: Maximum total USDC across all event contracts.
+        max_correlated_positions: Maximum number of positions on correlated contracts.
+        min_contract_liquidity: Minimum contract liquidity to trade.
+    """
+
+    max_position_per_contract: Decimal = Decimal("500")
+    max_total_event_exposure: Decimal = Decimal("2500")
+    max_correlated_positions: int = 3
+    min_contract_liquidity: Decimal = Decimal("1000")
+
+
+def check_event_contract_limit(
+    order: Order,
+    current_positions: Dict[str, Position],
+    portfolio_equity: Decimal,
+    limits: EventContractLimits,
+) -> RiskDecision:
+    """Check if an event contract order violates limits.
+
+    Validates:
+    - Price is a valid probability (0.01-0.99)
+    - Per-contract position limit
+    - Total event contract exposure
+
+    Args:
+        order: The order to validate.
+        current_positions: Current portfolio positions.
+        portfolio_equity: Current portfolio equity.
+        limits: Event contract limit configuration.
+
+    Returns:
+        RiskDecision indicating if order is allowed, reduced, or rejected.
+    """
+    # Validate probability price range
+    if order.limit_price is not None:
+        price = order.limit_price
+        if price < Decimal("0.01") or price > Decimal("0.99"):
+            return RiskDecision(
+                action=RiskAction.REJECT,
+                order_id=order.order_id,
+                original_quantity=order.quantity,
+                approved_quantity=0,
+                reason=f"Event contract price {price} outside valid range [0.01, 0.99]",
+                violated_limits=["invalid_probability_price"],
+            )
+
+    # Calculate order notional (shares × price)
+    price = order.limit_price or Decimal("0.50")
+    order_notional = Decimal(str(order.quantity)) * price
+
+    # Check per-contract limit
+    current_pos = current_positions.get(order.symbol)
+    current_notional = Decimal("0")
+    if current_pos:
+        current_notional = abs(Decimal(str(current_pos.quantity)) * price)
+
+    new_notional = current_notional + order_notional
+    if new_notional > limits.max_position_per_contract:
+        remaining = limits.max_position_per_contract - current_notional
+        if remaining <= 0:
+            return RiskDecision(
+                action=RiskAction.REJECT,
+                order_id=order.order_id,
+                original_quantity=order.quantity,
+                approved_quantity=0,
+                reason=f"Per-contract limit ${limits.max_position_per_contract} reached",
+                violated_limits=["max_position_per_contract"],
+            )
+        allowed_qty = max(1, int(remaining / price))
+        return RiskDecision(
+            action=RiskAction.REDUCE,
+            order_id=order.order_id,
+            original_quantity=order.quantity,
+            approved_quantity=allowed_qty,
+            reason=f"Reduced to stay within ${limits.max_position_per_contract} per contract",
+            violated_limits=["max_position_per_contract"],
+        )
+
+    # Check total event contract exposure
+    total_exposure = Decimal("0")
+    for pos in current_positions.values():
+        total_exposure += abs(Decimal(str(pos.quantity)) * Decimal(str(pos.average_cost)))
+    total_exposure += order_notional
+
+    if total_exposure > limits.max_total_event_exposure:
+        return RiskDecision(
+            action=RiskAction.REJECT,
+            order_id=order.order_id,
+            original_quantity=order.quantity,
+            approved_quantity=0,
+            reason=f"Total event exposure ${total_exposure} exceeds ${limits.max_total_event_exposure}",
+            violated_limits=["max_total_event_exposure"],
+        )
+
+    return RiskDecision(
+        action=RiskAction.ALLOW,
+        order_id=order.order_id,
+        original_quantity=order.quantity,
+        approved_quantity=order.quantity,
+        reason="Event contract order within limits",
+    )
+
+
 def check_exposure_limits(
     snapshot: PortfolioSnapshot,
     limits: ExposureLimits,

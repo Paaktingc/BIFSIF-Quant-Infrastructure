@@ -1,0 +1,44 @@
+# Polymarket Universe Configuration
+# Defines which market categories and institutions to monitor
+
+monitored_categories:
+  - "crypto"
+  - "politics"
+  - "economics"
+  - "geopolitics"
+
+monitored_institutions:
+  central_banks:
+    - name: "ECB"
+      keywords: ["ECB", "European Central Bank", "Lagarde"]
+      feed_timezone: "Europe/Frankfurt"
+    - name: "RBA"
+      keywords: ["RBA", "Reserve Bank of Australia"]
+      feed_timezone: "Australia/Sydney"
+    - name: "BOE"
+      keywords: ["BOE", "Bank of England"]
+      feed_timezone: "Europe/London"
+    - name: "BOJ"
+      keywords: ["BOJ", "Bank of Japan"]
+      feed_timezone: "Asia/Tokyo"
+
+  legislative:
+    - name: "EU Parliament"
+      keywords: ["EU Parliament", "European Parliament"]
+      feed_timezone: "Europe/Brussels"
+    - name: "Australian Parliament"
+      keywords: ["Australian Parliament", "Canberra"]
+      feed_timezone: "Australia/Sydney"
+
+# Market filters for contract discovery
+market_filters:
+  min_liquidity_usd: 1000
+  min_volume_24h: 500
+  max_end_date_days: 30
+  exclude_resolved: true
+
+# Refresh intervals (seconds)
+refresh_intervals:
+  market_cache: 300
+  price_quotes: 30
+  news_feeds: 60
