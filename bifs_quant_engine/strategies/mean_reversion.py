@@ -71,7 +71,7 @@ class MeanReversionStrategy(Strategy):
             if symbol not in price_history.columns:
                 continue
                 
-            prices = price_history[symbol].dropna()
+            prices = price_history[symbol].squeeze().dropna()
             
             # Ensure we have enough data for this specific symbol
             if len(prices) < min_history:
@@ -123,14 +123,9 @@ class MeanReversionStrategy(Strategy):
     def _calculate_rsi(self, series: pd.Series) -> pd.Series:
         """Calculate RSI."""
         delta = series.diff()
-        
-        # Make copy to avoid SettingWithCopyWarning if any
-        gain = delta.copy()
-        loss = delta.copy()
-        
-        gain[gain < 0] = 0
-        loss[loss > 0] = 0
-        loss = abs(loss)
+
+        gain = delta.clip(lower=0)
+        loss = (-delta).clip(lower=0)
         
         # Use Simple Moving Average for RSI (classic Wilder uses Exponential)
         # Using mean() for simplicity as per original code, can upgrade later

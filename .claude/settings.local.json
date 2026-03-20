@@ -6,7 +6,8 @@
       "Bash(cp \"/Users/dixon/PycharmProjects/BIFSIF Quant Infrastructure/bifs_quant_engine/data/binance_feed.py\" \"/Users/dixon/PycharmProjects/polymarket-alpha-strategies/polymarket_alpha/data/binance_feed.py\")",
       "Bash(cp \"/Users/dixon/PycharmProjects/BIFSIF Quant Infrastructure/bifs_quant_engine/config/polymarket_universe.yaml\" \"/Users/dixon/PycharmProjects/polymarket-alpha-strategies/polymarket_alpha/config/polymarket_universe.yaml\")",
       "Bash(cp \"/Users/dixon/PycharmProjects/BIFSIF Quant Infrastructure/bifs_quant_engine/config/news_feeds.yaml\" \"/Users/dixon/PycharmProjects/polymarket-alpha-strategies/polymarket_alpha/config/news_feeds.yaml\")",
-      "Bash(cp \"/Users/dixon/PycharmProjects/BIFSIF Quant Infrastructure/bifs_quant_engine/config/binance_config.yaml\" \"/Users/dixon/PycharmProjects/polymarket-alpha-strategies/polymarket_alpha/config/binance_config.yaml\")"
+      "Bash(cp \"/Users/dixon/PycharmProjects/BIFSIF Quant Infrastructure/bifs_quant_engine/config/binance_config.yaml\" \"/Users/dixon/PycharmProjects/polymarket-alpha-strategies/polymarket_alpha/config/binance_config.yaml\")",
+      "WebSearch"
     ],
     "additionalDirectories": [
       "/Users/dixon/PycharmProjects/polymarket-alpha-strategies/polymarket_alpha/nlp",

@@ -82,6 +82,13 @@ class PairsConfig:
     max_portfolio_drawdown: float = 0.10 # 10% portfolio drawdown limit
     transaction_cost_bps: float = 5.0    # Transaction costs in basis points
 
+    # --- CUSUM Regime Detection ---
+    cusum_k: float = 0.5                 # CUSUM allowance in standardised innovation units
+    cusum_h: float = 5.0                 # CUSUM alarm threshold; breach → cointegration suspect
+
+    # --- Rolling OU Re-estimation ---
+    ou_refit_freq: int = 5               # Refit OU parameters every N bars
+
     # --- Backtest ---
     initial_capital: float = 100_000.0
     start_date: str = "2018-01-01"
@@ -106,13 +113,19 @@ class PairSelector:
     def __init__(self, config: PairsConfig):
         self.config = config
 
-    def find_cointegrated_pairs(self, prices: pd.DataFrame) -> List[Tuple[str, str, float]]:
+    def find_cointegrated_pairs(
+        self, prices: pd.DataFrame
+    ) -> List[Tuple[str, str, float, Optional[float]]]:
         """
-        Run pairwise Engle-Granger cointegration tests.
-        
-        Returns list of (ticker1, ticker2, pvalue) tuples.
+        Test all pairs for cointegration using the Johansen trace test.
+
+        Returns list of (ticker1, ticker2, pseudo_pvalue, hedge_ratio) tuples.
+
+        Johansen is preferred over Engle-Granger because it is symmetric
+        (invariant to which asset is 'y' vs 'x') and jointly estimates the
+        cointegrating vector and stationarity test in one step.
         """
-        from statsmodels.tsa.stattools import coint
+        from statsmodels.tsa.vector_ar.vecm import coint_johansen
 
         tickers = prices.columns.tolist()
         n = len(tickers)
@@ -121,13 +134,37 @@ class PairSelector:
         for i in range(n):
             for j in range(i + 1, n):
                 try:
-                    _, pvalue, _ = coint(prices[tickers[i]], prices[tickers[j]])
-                    if pvalue < self.config.coint_pvalue:
-                        pairs.append((tickers[i], tickers[j], pvalue))
+                    price_matrix = prices[[tickers[i], tickers[j]]].dropna().values
+                    if len(price_matrix) < 50:
+                        continue
+                    result = coint_johansen(price_matrix, det_order=0, k_ar_diff=1)
+                    trace_stat = result.lr1[0]
+                    cv_90, cv_95, cv_99 = result.cvt[0]
+
+                    # Map trace statistic to pseudo p-value for ranking
+                    if trace_stat > cv_99:
+                        pvalue = 0.01
+                    elif trace_stat > cv_95:
+                        pvalue = 0.05
+                    elif trace_stat > cv_90:
+                        pvalue = 0.10
+                    else:
+                        continue  # Not cointegrated at 90%
+
+                    if pvalue > self.config.coint_pvalue:
+                        continue
+
+                    # Extract hedge ratio from first cointegrating vector
+                    # Convention: v @ [p1, p2] = 0  →  spread = p1 - (-v[1]/v[0]) * p2
+                    v = result.evec[:, 0]
+                    if abs(v[0]) < 1e-10:
+                        continue
+                    hedge_ratio = float(-v[1] / v[0])
+
+                    pairs.append((tickers[i], tickers[j], pvalue, hedge_ratio))
                 except Exception:
                     continue
 
-        # Sort by p-value (most cointegrated first)
         pairs.sort(key=lambda x: x[2])
         return pairs
 
@@ -227,15 +264,18 @@ class PairSelector:
         cointegrated = self.find_cointegrated_pairs(prices)
         qualified_pairs = []
 
-        for ticker1, ticker2, pvalue in cointegrated:
-            # Compute hedge ratio via OLS
-            y = prices[ticker1].values
-            x = add_constant(prices[ticker2].values)
-            try:
-                result = OLS(y, x).fit()
-                hedge_ratio = result.params[1]
-            except Exception:
-                continue
+        for ticker1, ticker2, pvalue, johansen_hr in cointegrated:
+            # Use Johansen cointegrating vector directly; fall back to OLS if needed
+            if johansen_hr is not None:
+                hedge_ratio = johansen_hr
+            else:
+                y = prices[ticker1].values
+                x = add_constant(prices[ticker2].values)
+                try:
+                    result = OLS(y, x).fit()
+                    hedge_ratio = result.params[1]
+                except Exception:
+                    continue
 
             # Compute spread
             spread = prices[ticker1] - hedge_ratio * prices[ticker2]
@@ -291,17 +331,30 @@ class KalmanHedgeTracker:
     This avoids choosing a lookback window and lets the hedge ratio adapt smoothly.
     """
 
-    def __init__(self, delta: float = 1e-4, obs_cov: float = 1.0):
+    def __init__(self, delta: float = 1e-4, obs_cov: float = 1.0,
+                 cusum_k: float = 0.5, cusum_h: float = 5.0):
         self.delta = delta
         self.obs_cov = obs_cov
+        self.cusum_k = cusum_k
+        self.cusum_h = cusum_h
         self.theta = None  # State: [slope, intercept]
         self.P = None      # State covariance
         self.initialized = False
+        # EM-calibrated noise matrices (set by fit_em; override delta / obs_cov)
+        self.Q_em: Optional[np.ndarray] = None
+        self.R_em: Optional[float] = None
+        # CUSUM state
+        self.cusum_upper: float = 0.0
+        self.cusum_lower: float = 0.0
+        self.cointegration_ok: bool = True
 
     def initialize(self):
         """Reset Kalman Filter state."""
         self.theta = np.zeros(2)  # [hedge_ratio, intercept]
         self.P = np.eye(2) * 1.0  # Initial uncertainty
+        self.cusum_upper = 0.0
+        self.cusum_lower = 0.0
+        self.cointegration_ok = True
         self.initialized = True
 
     def update(self, y: float, x: float) -> Tuple[float, float, float]:
@@ -321,8 +374,9 @@ class KalmanHedgeTracker:
         # Observation vector
         F = np.array([x, 1.0])
 
-        # Transition covariance (random walk noise)
-        Q = self.delta * np.eye(2)
+        # Process and observation noise — use EM-calibrated values when available
+        Q = self.Q_em if self.Q_em is not None else self.delta * np.eye(2)
+        R = self.R_em if self.R_em is not None else self.obs_cov
 
         # --- Prediction step ---
         theta_pred = self.theta  # Random walk: θ_t|t-1 = θ_t-1
@@ -334,14 +388,25 @@ class KalmanHedgeTracker:
         e = y - y_hat
 
         # Innovation covariance
-        S = F @ P_pred @ F.T + self.obs_cov
+        S = float(F @ P_pred @ F.T + R)
 
         # Kalman gain
         K = P_pred @ F.T / S
 
         # State update
         self.theta = theta_pred + K * e
-        self.P = P_pred - np.outer(K, K) * S
+
+        # Joseph stabilised covariance (numerically positive-definite vs simplified form)
+        I_KF = np.eye(2) - np.outer(K, F)
+        self.P = I_KF @ P_pred @ I_KF.T + np.outer(K, K) * R
+
+        # --- CUSUM on standardised innovations ---
+        e_std = e / np.sqrt(S)
+        self.cusum_upper = max(0.0, self.cusum_upper + e_std - self.cusum_k)
+        self.cusum_lower = max(0.0, self.cusum_lower - e_std - self.cusum_k)
+        self.cointegration_ok = (
+            self.cusum_upper < self.cusum_h and self.cusum_lower < self.cusum_h
+        )
 
         hedge_ratio = self.theta[0]
         intercept = self.theta[1]
@@ -349,12 +414,43 @@ class KalmanHedgeTracker:
 
         return hedge_ratio, intercept, spread
 
-    def process_series(self, y: pd.Series, x: pd.Series) -> pd.DataFrame:
+    def fit_em(self, y: pd.Series, x: pd.Series, n_iter: int = 10) -> bool:
+        """
+        Use EM to estimate Q (process noise) and R (observation noise) from data.
+        Sets self.Q_em and self.R_em which override delta/obs_cov in update().
+        Returns True if EM succeeded, False if pykalman is unavailable.
+        """
+        try:
+            from pykalman import KalmanFilter as PyKF
+        except ImportError:
+            return False
+        try:
+            T = len(y)
+            obs = y.values.reshape(T, 1)
+            obs_matrices = np.column_stack([x.values, np.ones(T)]).reshape(T, 1, 2)
+            kf = PyKF(
+                n_dim_obs=1,
+                n_dim_state=2,
+                transition_matrices=np.eye(2),
+                observation_matrices=obs_matrices,
+                em_vars=["transition_covariance", "observation_covariance"],
+            )
+            kf = kf.em(obs, n_iter=n_iter)
+            self.Q_em = np.array(kf.transition_covariance)
+            self.R_em = float(np.array(kf.observation_covariance).flat[0])
+            return True
+        except Exception:
+            return False
+
+    def process_series(self, y: pd.Series, x: pd.Series, fit_em: bool = True) -> pd.DataFrame:
         """
         Process full time series and return DataFrame of Kalman-estimated values.
+        If fit_em=True, first calibrates Q and R via EM on the full series.
         """
+        if fit_em:
+            self.fit_em(y, x)
         self.initialize()
-        
+
         records = []
         for i in range(len(y)):
             hr, intercept, spread = self.update(y.iloc[i], x.iloc[i])
@@ -363,6 +459,7 @@ class KalmanHedgeTracker:
                 "hedge_ratio": hr,
                 "intercept": intercept,
                 "spread": spread,
+                "cointegration_ok": self.cointegration_ok,
                 "y": y.iloc[i],
                 "x": x.iloc[i],
             })
@@ -511,40 +608,67 @@ class SignalGenerator:
         """
         signals = []
         current_position = PairPosition.FLAT
-        entry_date = None
         days_held = 0
 
-        theta = ou_params["theta"]
-        mu = ou_params["mu"]
-        sigma = ou_params["sigma"]
-
-        if mu <= 0 or sigma <= 0:
+        if ou_params["mu"] <= 0 or ou_params["sigma"] <= 0:
             return signals
 
-        sigma_eq = sigma / np.sqrt(2 * mu)
-        if sigma_eq <= 0:
-            return signals
-
-        # Compute z-scores
         spreads = kalman_df["spread"].values
-        z_scores = (spreads - theta) / sigma_eq
-
-        # Compute OU-optimal thresholds
         tc = self.config.transaction_cost_bps / 10000
-        z_entry, z_exit = OUFitter.compute_optimal_thresholds(mu, sigma, tc)
+        lookback = self.config.ou_lookback
+        refit_freq = self.config.ou_refit_freq
+
+        # Mutable OU state — updated every refit_freq bars
+        current_ou = ou_params.copy()
+        sigma_eq = current_ou["sigma"] / np.sqrt(2 * current_ou["mu"])
+        theta = current_ou["theta"]
+        z_entry, z_exit = OUFitter.compute_optimal_thresholds(
+            current_ou["mu"], current_ou["sigma"], tc
+        )
+        bars_since_refit = 0
 
         for i in range(1, len(kalman_df)):
             date = kalman_df.index[i]
-            z = z_scores[i]
             spread = spreads[i]
             hr = kalman_df["hedge_ratio"].iloc[i]
+            coint_ok = bool(kalman_df["cointegration_ok"].iloc[i]) \
+                if "cointegration_ok" in kalman_df.columns else True
+
+            # --- Rolling OU re-estimation ---
+            bars_since_refit += 1
+            if bars_since_refit >= refit_freq and i >= lookback:
+                window = spreads[max(0, i - lookback):i]
+                new_params = OUFitter.fit(window)
+                if new_params["mu"] > 0 and new_params["sigma"] > 0:
+                    current_ou = new_params
+                    sigma_eq = current_ou["sigma"] / np.sqrt(2 * current_ou["mu"])
+                    theta = current_ou["theta"]
+                    z_entry, z_exit = OUFitter.compute_optimal_thresholds(
+                        current_ou["mu"], current_ou["sigma"], tc
+                    )
+                bars_since_refit = 0
+
+            z = (spread - theta) / sigma_eq if sigma_eq > 0 else 0.0
+
+            # --- CUSUM: exit and suspend if cointegration broken ---
+            if not coint_ok:
+                if current_position != PairPosition.FLAT:
+                    signals.append(TradeSignal(
+                        date=date, ticker1=ticker1, ticker2=ticker2,
+                        position=PairPosition.FLAT, hedge_ratio=hr,
+                        z_score=z, spread=spread,
+                        reason="EXIT (CUSUM: cointegration breakdown)",
+                    ))
+                    current_position = PairPosition.FLAT
+                    days_held = 0
+                continue
 
             if current_position == PairPosition.FLAT:
                 # --- Entry conditions ---
                 if z < -z_entry:
                     # Spread too low → Long spread (buy asset1, sell asset2)
                     current_position = PairPosition.LONG_SPREAD
-                    entry_date = date
+
                     days_held = 0
                     signals.append(TradeSignal(
                         date=date, ticker1=ticker1, ticker2=ticker2,
@@ -555,7 +679,7 @@ class SignalGenerator:
                 elif z > z_entry:
                     # Spread too high → Short spread (sell asset1, buy asset2)
                     current_position = PairPosition.SHORT_SPREAD
-                    entry_date = date
+
                     days_held = 0
                     signals.append(TradeSignal(
                         date=date, ticker1=ticker1, ticker2=ticker2,
@@ -590,7 +714,6 @@ class SignalGenerator:
                         z_score=z, spread=spread, reason=exit_reason
                     ))
                     current_position = PairPosition.FLAT
-                    entry_date = None
                     days_held = 0
 
         return signals
